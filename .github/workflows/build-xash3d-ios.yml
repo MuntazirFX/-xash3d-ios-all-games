@@ -9,26 +9,46 @@ jobs:
 
     steps:
 
+      # =========================================================
+      # 1. CHECKOUT
+      # =========================================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
+
+      # =========================================================
+      # 2. DEPENDENCIES
+      # =========================================================
       - name: Install dependencies
         run: |
           brew install cmake ninja python
+
           brew uninstall --ignore-dependencies freetype || true
           brew uninstall --ignore-dependencies harfbuzz || true
 
+
+      # =========================================================
+      # 3. iOS CMAKE TOOLCHAIN
+      # =========================================================
       - name: Clone ios-cmake
         run: |
           git clone --depth 1 \
             https://github.com/leetal/ios-cmake.git
 
+
+      # =========================================================
+      # 4. FREETYPE FOR iOS ARM64
+      # =========================================================
       - name: Build FreeType for iOS arm64
         run: |
-          git clone --depth 1 --branch VER-2-13-3 \
-            https://github.com/freetype/freetype.git freetype
+          git clone --depth 1 \
+            --branch VER-2-13-3 \
+            https://github.com/freetype/freetype.git \
+            freetype
 
-          cmake -S freetype -B freetype-build \
+          cmake \
+            -S freetype \
+            -B freetype-build \
             -G Xcode \
             -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/ios-cmake/ios.toolchain.cmake" \
             -DPLATFORM=OS64 \
@@ -41,14 +61,37 @@ jobs:
             -DFT_DISABLE_HARFBUZZ=TRUE \
             -DFT_DISABLE_BROTLI=TRUE
 
-          cmake --build freetype-build --config Release
-          cmake --install freetype-build --config Release
+          cmake \
+            --build freetype-build \
+            --config Release
 
+          cmake \
+            --install freetype-build \
+            --config Release
+
+          echo "===== FREETYPE ====="
+          find "$GITHUB_WORKSPACE/freetype-ios" \
+            -type f \
+            -name "*.a" \
+            -print
+
+
+      # =========================================================
+      # 5. SDL2
+      # =========================================================
       - name: Clone SDL2
         run: |
-          git clone --depth 1 --branch SDL2 --recursive \
-            https://github.com/libsdl-org/SDL.git SDL
+          git clone \
+            --depth 1 \
+            --branch SDL2 \
+            --recursive \
+            https://github.com/libsdl-org/SDL.git \
+            SDL
 
+
+      # =========================================================
+      # 6. BUILD SDL2 iOS FRAMEWORK
+      # =========================================================
       - name: Build SDL2 iOS framework
         run: |
           cd SDL/Xcode/SDL
@@ -62,14 +105,28 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO
 
-          test -d "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework"
+          test -d \
+            "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework"
 
+          echo "===== SDL2 READY ====="
+
+
+      # =========================================================
+      # 7. XASH3D FWGS
+      # =========================================================
       - name: Clone Xash3D FWGS
         run: |
-          git clone --recursive \
+          mkdir -p engine
+
+          git clone \
+            --recursive \
             https://github.com/FWGS/xash3d-fwgs.git \
             engine/xash3d-fwgs
 
+
+      # =========================================================
+      # 8. CONFIGURE XASH3D
+      # =========================================================
       - name: Configure Xash3D for iOS
         run: |
           cd engine/xash3d-fwgs
@@ -79,17 +136,31 @@ jobs:
             --enable-bundled-deps \
             --sdl2 "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework"
 
+
+      # =========================================================
+      # 9. BUILD XASH3D
+      # =========================================================
       - name: Build Xash3D
         run: |
           cd engine/xash3d-fwgs
+
           ./waf build
 
+
+      # =========================================================
+      # 10. CLONE CS16 CLIENT
+      # =========================================================
       - name: Clone CS16 Client
         run: |
-          git clone --recursive \
+          git clone \
+            --recursive \
             https://github.com/Velaron/cs16-client.git \
             cs16-client
 
+
+      # =========================================================
+      # 11. CONFIGURE CS16 CLIENT
+      # =========================================================
       - name: Configure CS16 Client for iOS arm64
         run: |
           cmake \
@@ -104,54 +175,251 @@ jobs:
             -DFREETYPE_INCLUDE_DIRS="$GITHUB_WORKSPACE/freetype-ios/include/freetype2" \
             -DCMAKE_BUILD_TYPE=Release
 
+
+      # =========================================================
+      # 12. BUILD CS16
+      # =========================================================
       - name: Build CS16 Client
         run: |
           cmake \
             --build cs16-build \
             --config Release
 
+
+      # =========================================================
+      # 13. FIND ACTUAL CS16 LIBRARIES
+      # =========================================================
+      - name: Locate CS16 libraries
+        run: |
+          echo "======================================"
+          echo "SEARCHING CS16 LIBRARIES"
+          echo "======================================"
+
+          find "$GITHUB_WORKSPACE/cs16-build" \
+            -type f \
+            \( \
+              -name "client_arm64.dylib" \
+              -o -name "menu_arm64.dylib" \
+              -o -name "cs_arm64.dylib" \
+              -o -name "yapb_arm64.dylib" \
+            \) \
+            -print
+
+          echo "======================================"
+
+          CLIENT=$(find "$GITHUB_WORKSPACE/cs16-build" \
+            -type f \
+            -name "client_arm64.dylib" \
+            | head -n 1)
+
+          MENU=$(find "$GITHUB_WORKSPACE/cs16-build" \
+            -type f \
+            -name "menu_arm64.dylib" \
+            | head -n 1)
+
+          CS=$(find "$GITHUB_WORKSPACE/cs16-build" \
+            -type f \
+            -name "cs_arm64.dylib" \
+            | head -n 1)
+
+          YAPB=$(find "$GITHUB_WORKSPACE/cs16-build" \
+            -type f \
+            -name "yapb_arm64.dylib" \
+            | head -n 1)
+
+          echo "CLIENT=$CLIENT"
+          echo "MENU=$MENU"
+          echo "CS=$CS"
+          echo "YAPB=$YAPB"
+
+          test -n "$CLIENT"
+          test -n "$MENU"
+          test -n "$CS"
+
+          echo "CS16 libraries found successfully."
+
+
+      # =========================================================
+      # 14. PREPARE XASH3D iOS BUILD DIRECTORY
+      # =========================================================
       - name: Prepare Xash3D iOS bundle
         run: |
-          cd engine/xash3d-fwgs
+          set -e
 
-          rm -rf build/ios
-          mkdir -p build/ios/libs/cstrike/cl_dlls
-          mkdir -p build/ios/libs/cstrike/dlls
+          ENGINE="$GITHUB_WORKSPACE/engine/xash3d-fwgs"
+          BUILDDIR="$ENGINE/build"
+
+          echo "======================================"
+          echo "PREPARING XASH3D iOS BUNDLE"
+          echo "======================================"
+
+          rm -rf "$BUILDDIR/ios"
+
+          mkdir -p \
+            "$BUILDDIR/ios/libs/cstrike/cl_dlls" \
+            "$BUILDDIR/ios/libs/cstrike/dlls"
+
+          # -----------------------------------------------------
+          # SDL2
+          # -----------------------------------------------------
+          echo "Copying SDL2.framework..."
+
+          rm -rf "$BUILDDIR/SDL2.framework"
 
           cp -R \
             "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework" \
-            build/
+            "$BUILDDIR/SDL2.framework"
 
-          echo "===== COPYING CS16 CLIENT ====="
 
-          cp "$GITHUB_WORKSPACE/cs16-build/3rdparty/mainui_cpp/Release-iphoneos/menu_arm64.dylib" \
-            build/ios/libs/cstrike/cl_dlls/menu_arm64.dylib
+          # -----------------------------------------------------
+          # Locate CS16 libraries
+          # -----------------------------------------------------
+          CLIENT=$(find "$GITHUB_WORKSPACE/cs16-build" \
+            -type f \
+            -name "client_arm64.dylib" \
+            | head -n 1)
 
-          cp "$GITHUB_WORKSPACE/cs16-build/3rdparty/mainui_cpp/Release-iphoneos/client_arm64.dylib" \
-            build/ios/libs/cstrike/cl_dlls/client_arm64.dylib
+          MENU=$(find "$GITHUB_WORKSPACE/cs16-build" \
+            -type f \
+            -name "menu_arm64.dylib" \
+            | head -n 1)
 
-          cp "$GITHUB_WORKSPACE/cs16-build/3rdparty/mainui_cpp/Release-iphoneos/cs_arm64.dylib" \
-            build/ios/libs/cstrike/dlls/cs_arm64.dylib
+          CS=$(find "$GITHUB_WORKSPACE/cs16-build" \
+            -type f \
+            -name "cs_arm64.dylib" \
+            | head -n 1)
 
-          cp "$GITHUB_WORKSPACE/cs16-build/3rdparty/mainui_cpp/Release-iphoneos/yapb_arm64.dylib" \
-            build/ios/libs/cstrike/dlls/yapb_arm64.dylib
+          YAPB=$(find "$GITHUB_WORKSPACE/cs16-build" \
+            -type f \
+            -name "yapb_arm64.dylib" \
+            | head -n 1)
 
-          echo "===== CHECK CS16 FILES ====="
-          find build/ios -type f -print
 
+          # -----------------------------------------------------
+          # Verify required files
+          # -----------------------------------------------------
+          echo "CLIENT: $CLIENT"
+          echo "MENU:   $MENU"
+          echo "CS:     $CS"
+          echo "YAPB:   $YAPB"
+
+          test -f "$CLIENT"
+          test -f "$MENU"
+          test -f "$CS"
+
+
+          # -----------------------------------------------------
+          # Client libraries
+          # -----------------------------------------------------
+          echo "Copying client libraries..."
+
+          cp "$CLIENT" \
+            "$BUILDDIR/ios/libs/cstrike/cl_dlls/client_arm64.dylib"
+
+          cp "$MENU" \
+            "$BUILDDIR/ios/libs/cstrike/cl_dlls/menu_arm64.dylib"
+
+
+          # -----------------------------------------------------
+          # Server libraries
+          # -----------------------------------------------------
+          echo "Copying server libraries..."
+
+          cp "$CS" \
+            "$BUILDDIR/ios/libs/cstrike/dlls/cs_arm64.dylib"
+
+
+          # -----------------------------------------------------
+          # YaPB if available
+          # -----------------------------------------------------
+          if [ -n "$YAPB" ] && [ -f "$YAPB" ]; then
+            echo "Copying YaPB..."
+
+            cp "$YAPB" \
+              "$BUILDDIR/ios/libs/cstrike/dlls/yapb_arm64.dylib"
+          else
+            echo "YaPB not found - continuing without YaPB."
+          fi
+
+
+          # -----------------------------------------------------
+          # Show final library structure
+          # -----------------------------------------------------
+          echo ""
+          echo "======================================"
+          echo "FINAL GAME LIBRARIES"
+          echo "======================================"
+
+          find "$BUILDDIR/ios/libs" \
+            -type f \
+            -print
+
+          echo ""
+          echo "======================================"
+          echo "XASH3D BUILD DIRECTORY"
+          echo "======================================"
+
+          ls -lah "$BUILDDIR"
+
+
+      # =========================================================
+      # 15. CREATE IPA
+      # =========================================================
       - name: Create IPA
         run: |
-          cd engine/xash3d-fwgs
+          set -e
+
+          cd "$GITHUB_WORKSPACE/engine/xash3d-fwgs"
+
+          echo "======================================"
+          echo "CREATING iOS IPA"
+          echo "======================================"
 
           chmod +x scripts/ios/createipa.sh
 
           ./scripts/ios/createipa.sh
 
-          mv build/xash3d.ipa \
-            "$GITHUB_WORKSPACE/xash3d-cs16-ios-arm64.ipa"
+          echo ""
+          echo "======================================"
+          echo "IPA CHECK"
+          echo "======================================"
 
+          ls -lh build/xash3d.ipa
+
+          test -f build/xash3d.ipa
+
+          echo "IPA CREATED SUCCESSFULLY."
+
+
+      # =========================================================
+      # 16. INSPECT IPA
+      # =========================================================
+      - name: Inspect IPA
+        run: |
+          set -e
+
+          cd "$GITHUB_WORKSPACE/engine/xash3d-fwgs/build"
+
+          echo "======================================"
+          echo "IPA CONTENTS"
+          echo "======================================"
+
+          unzip -l xash3d.ipa
+
+          echo ""
+          echo "======================================"
+          echo "IPA SIZE"
+          echo "======================================"
+
+          ls -lh xash3d.ipa
+
+
+      # =========================================================
+      # 17. UPLOAD IPA
+      # =========================================================
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: xash3d-cs16-ios-ipa
-          path: xash3d-cs16-ios-arm64.ipa
+          path: engine/xash3d-fwgs/build/xash3d.ipa
+          if-no-files-found: error
