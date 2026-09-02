@@ -37,7 +37,7 @@ jobs:
 
 
       # =========================================================
-      # 4. FREETYPE
+      # 4. FREETYPE FOR iOS ARM64
       # =========================================================
       - name: Build FreeType for iOS arm64
         run: |
@@ -63,10 +63,20 @@ jobs:
             -DFT_DISABLE_HARFBUZZ=TRUE \
             -DFT_DISABLE_BROTLI=TRUE
 
-          cmake --build freetype-build --config Release
-          cmake --install freetype-build --config Release
+          cmake \
+            --build freetype-build \
+            --config Release
 
-          test -f "$GITHUB_WORKSPACE/freetype-ios/lib/libfreetype.a"
+          cmake \
+            --install freetype-build \
+            --config Release
+
+          echo "===== FREETYPE ====="
+
+          find "$GITHUB_WORKSPACE/freetype-ios" \
+            -type f \
+            -name "*.a" \
+            -print
 
 
       # =========================================================
@@ -74,7 +84,8 @@ jobs:
       # =========================================================
       - name: Clone SDL2
         run: |
-          git clone --depth 1 \
+          git clone \
+            --depth 1 \
             --branch SDL2 \
             --recursive \
             https://github.com/libsdl-org/SDL.git \
@@ -82,7 +93,7 @@ jobs:
 
 
       # =========================================================
-      # 6. BUILD SDL2
+      # 6. BUILD SDL2 iOS FRAMEWORK
       # =========================================================
       - name: Build SDL2 iOS framework
         run: |
@@ -102,17 +113,18 @@ jobs:
           test -d \
             "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework"
 
+          echo "===== SDL2 READY ====="
+
 
       # =========================================================
-      # 7. XASH3D
+      # 7. XASH3D FWGS
       # =========================================================
       - name: Clone Xash3D FWGS
         run: |
-          set -e
-
           mkdir -p engine
 
-          git clone --recursive \
+          git clone \
+            --recursive \
             https://github.com/FWGS/xash3d-fwgs.git \
             engine/xash3d-fwgs
 
@@ -145,120 +157,18 @@ jobs:
 
 
       # =========================================================
-      # 10. CLONE HALF-LIFE SDK
-      # =========================================================
-      - name: Clone Half-Life SDK
-        run: |
-          set -e
-
-          git clone --recursive \
-            --branch mobile_hacks \
-            https://github.com/FWGS/hlsdk-portable.git \
-            hlsdk
-
-
-      # =========================================================
-      # 11. BUILD HALF-LIFE VALVE ARM64
-      #
-      # IMPORTANT:
-      # NO -G Xcode HERE
-      # This prevents Xcode signing errors.
-      # =========================================================
-      - name: Build Half-Life valve ARM64
-        run: |
-          set -e
-
-          ENGINE="$GITHUB_WORKSPACE/engine/xash3d-fwgs"
-          IOSDIR="$ENGINE/build/ios"
-          LIBSDIR="$IOSDIR/libs"
-
-          echo "======================================"
-          echo "BUILDING HALF-LIFE VALVE ARM64"
-          echo "======================================"
-
-          mkdir -p "$LIBSDIR"
-
-          cd "$GITHUB_WORKSPACE/hlsdk"
-
-          rm -rf build
-
-          cmake \
-            -DCMAKE_SYSTEM_NAME=iOS \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
-            -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DCMAKE_INSTALL_PREFIX="$LIBSDIR" \
-            -DGAMEDIR=valve \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -B build \
-            -S .
-
-          cmake \
-            --build build \
-            --target install
-
-          echo "======================================"
-          echo "HALF-LIFE LIBRARIES"
-          echo "======================================"
-
-          find "$LIBSDIR/valve" \
-            -type f \
-            \( -name "*.dylib" -o -name "*.a" \) \
-            -print
-
-
-      # =========================================================
-      # 12. VERIFY HALF-LIFE
-      # =========================================================
-      - name: Verify Half-Life ARM64 libraries
-        run: |
-          set -e
-
-          ENGINE="$GITHUB_WORKSPACE/engine/xash3d-fwgs"
-          LIBSDIR="$ENGINE/build/ios/libs"
-
-          echo "======================================"
-          echo "CHECKING HALF-LIFE LIBRARIES"
-          echo "======================================"
-
-          find "$LIBSDIR/valve" \
-            -type f \
-            -name "*.dylib" \
-            -print
-
-          CLIENT=$(find "$LIBSDIR/valve" \
-            -type f \
-            -name "client_arm64.dylib" \
-            | head -n 1)
-
-          HL=$(find "$LIBSDIR/valve" \
-            -type f \
-            -name "hl_arm64.dylib" \
-            | head -n 1)
-
-          echo "CLIENT = $CLIENT"
-          echo "HL     = $HL"
-
-          test -f "$CLIENT"
-          test -f "$HL"
-
-          file "$CLIENT"
-          file "$HL"
-
-
-      # =========================================================
-      # 13. CLONE CS16
+      # 10. CLONE CS16 CLIENT
       # =========================================================
       - name: Clone CS16 Client
         run: |
-          set -e
-
-          git clone --recursive \
+          git clone \
+            --recursive \
             https://github.com/Velaron/cs16-client.git \
             cs16-client
 
 
       # =========================================================
-      # 14. CONFIGURE CS16
+      # 11. CONFIGURE CS16 CLIENT
       # =========================================================
       - name: Configure CS16 Client for iOS arm64
         run: |
@@ -278,7 +188,7 @@ jobs:
 
 
       # =========================================================
-      # 15. BUILD CS16
+      # 12. BUILD CS16
       # =========================================================
       - name: Build CS16 Client
         run: |
@@ -290,11 +200,15 @@ jobs:
 
 
       # =========================================================
-      # 16. LOCATE CS16 LIBRARIES
+      # 13. LOCATE CS16 LIBRARIES
       # =========================================================
       - name: Locate CS16 libraries
         run: |
           set -e
+
+          echo "======================================"
+          echo "SEARCHING CS16 LIBRARIES"
+          echo "======================================"
 
           find "$GITHUB_WORKSPACE/cs16-build" \
             -type f \
@@ -331,76 +245,49 @@ jobs:
           echo "CS=$CS"
           echo "YAPB=$YAPB"
 
-          test -n "$CLIENT"
-          test -n "$MENU"
-          test -n "$CS"
+          test -f "$CLIENT"
+          test -f "$MENU"
+          test -f "$CS"
+
+          echo "CS16 libraries found successfully."
 
 
       # =========================================================
-      # 17. PREPARE GAME DIRECTORIES
+      # 14. PREPARE iOS BUILD
       # =========================================================
-      - name: Prepare Xash3D game directories
+      - name: Prepare Xash3D iOS bundle
         run: |
           set -e
 
           ENGINE="$GITHUB_WORKSPACE/engine/xash3d-fwgs"
-          IOSDIR="$ENGINE/build/ios"
-          LIBSDIR="$IOSDIR/libs"
+          BUILDDIR="$ENGINE/build"
 
           echo "======================================"
-          echo "PREPARING GAME DIRECTORIES"
+          echo "PREPARING XASH3D iOS BUNDLE"
           echo "======================================"
+
+          rm -rf "$BUILDDIR/ios"
 
           mkdir -p \
-            "$LIBSDIR/valve/cl_dlls" \
-            "$LIBSDIR/valve/dlls" \
-            "$LIBSDIR/valve_hd/cl_dlls" \
-            "$LIBSDIR/valve_hd/dlls" \
-            "$LIBSDIR/cstrike/cl_dlls" \
-            "$LIBSDIR/cstrike/dlls" \
-            "$LIBSDIR/cstrike_hd/cl_dlls" \
-            "$LIBSDIR/cstrike_hd/dlls"
+            "$BUILDDIR/ios/libs/cstrike/cl_dlls" \
+            "$BUILDDIR/ios/libs/cstrike/dlls"
 
 
-      # =========================================================
-      # 18. COPY HALF-LIFE LIBRARIES
-      # =========================================================
-      - name: Install Half-Life libraries
-        run: |
-          set -e
+          # -----------------------------------------------------
+          # SDL2
+          # -----------------------------------------------------
+          echo "Copying SDL2.framework..."
 
-          ENGINE="$GITHUB_WORKSPACE/engine/xash3d-fwgs"
-          LIBSDIR="$ENGINE/build/ios/libs"
+          rm -rf "$BUILDDIR/SDL2.framework"
 
-          HL_CLIENT="$LIBSDIR/valve/cl_dlls/client_arm64.dylib"
-          HL_SERVER="$LIBSDIR/valve/dlls/hl_arm64.dylib"
-
-          test -f "$HL_CLIENT"
-          test -f "$HL_SERVER"
-
-          cp "$HL_CLIENT" \
-            "$LIBSDIR/valve_hd/cl_dlls/client_arm64.dylib"
-
-          cp "$HL_SERVER" \
-            "$LIBSDIR/valve_hd/dlls/hl_arm64.dylib"
-
-          echo "Half-Life valve:"
-          find "$LIBSDIR/valve" -type f -print
-
-          echo "Half-Life valve_hd:"
-          find "$LIBSDIR/valve_hd" -type f -print
+          cp -R \
+            "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework" \
+            "$BUILDDIR/SDL2.framework"
 
 
-      # =========================================================
-      # 19. COPY CS16 LIBRARIES
-      # =========================================================
-      - name: Install CS16 libraries
-        run: |
-          set -e
-
-          ENGINE="$GITHUB_WORKSPACE/engine/xash3d-fwgs"
-          LIBSDIR="$ENGINE/build/ios/libs"
-
+          # -----------------------------------------------------
+          # LOCATE CS16 LIBRARIES
+          # -----------------------------------------------------
           CLIENT=$(find "$GITHUB_WORKSPACE/cs16-build" \
             -type f \
             -name "client_arm64.dylib" \
@@ -421,167 +308,115 @@ jobs:
             -name "yapb_arm64.dylib" \
             | head -n 1)
 
+
+          # -----------------------------------------------------
+          # VERIFY
+          # -----------------------------------------------------
           test -f "$CLIENT"
           test -f "$MENU"
           test -f "$CS"
 
-          # CS16
+
+          # -----------------------------------------------------
+          # CS16 CLIENT LIBRARIES
+          # -----------------------------------------------------
           cp "$CLIENT" \
-            "$LIBSDIR/cstrike/cl_dlls/client_arm64.dylib"
+            "$BUILDDIR/ios/libs/cstrike/cl_dlls/client_arm64.dylib"
 
           cp "$MENU" \
-            "$LIBSDIR/cstrike/cl_dlls/menu_arm64.dylib"
+            "$BUILDDIR/ios/libs/cstrike/cl_dlls/menu_arm64.dylib"
 
+
+          # -----------------------------------------------------
+          # CS16 SERVER LIBRARY
+          # -----------------------------------------------------
           cp "$CS" \
-            "$LIBSDIR/cstrike/dlls/cs_arm64.dylib"
+            "$BUILDDIR/ios/libs/cstrike/dlls/cs_arm64.dylib"
 
-          # CS16 HD
-          cp "$CLIENT" \
-            "$LIBSDIR/cstrike_hd/cl_dlls/client_arm64.dylib"
 
-          cp "$MENU" \
-            "$LIBSDIR/cstrike_hd/cl_dlls/menu_arm64.dylib"
-
-          cp "$CS" \
-            "$LIBSDIR/cstrike_hd/dlls/cs_arm64.dylib"
-
+          # -----------------------------------------------------
+          # YaPB
+          # -----------------------------------------------------
           if [ -n "$YAPB" ] && [ -f "$YAPB" ]; then
-
             cp "$YAPB" \
-              "$LIBSDIR/cstrike/dlls/yapb_arm64.dylib"
-
-            cp "$YAPB" \
-              "$LIBSDIR/cstrike_hd/dlls/yapb_arm64.dylib"
-
+              "$BUILDDIR/ios/libs/cstrike/dlls/yapb_arm64.dylib"
           fi
 
+
+          # =====================================================
+          # GAME DATA
+          #
+          # Put your own legally obtained game folders in:
+          #
+          # games/valve
+          # games/valve_hd
+          # games/cstrike
+          # games/cstrike_hd
+          #
+          # They will be copied into build/ios/
+          # =====================================================
+
           echo "======================================"
-          echo "CS16 FILES"
+          echo "COPYING GAME DATA"
           echo "======================================"
 
-          find "$LIBSDIR/cstrike" \
-            -type f \
-            -print
 
-          echo "======================================"
-          echo "CS16 HD FILES"
-          echo "======================================"
+          for GAME in valve valve_hd cstrike cstrike_hd; do
 
-          find "$LIBSDIR/cstrike_hd" \
-            -type f \
-            -print
+            if [ -d "$GITHUB_WORKSPACE/games/$GAME" ]; then
+
+              echo "Found $GAME"
+
+              rm -rf "$BUILDDIR/ios/$GAME"
+
+              cp -R \
+                "$GITHUB_WORKSPACE/games/$GAME" \
+                "$BUILDDIR/ios/$GAME"
+
+            else
+
+              echo "WARNING: games/$GAME not found."
+
+            fi
+
+          done
 
 
-      # =========================================================
-      # 20. OPTIONAL GAME DATA
-      #
-      # Put your own game files in:
-      #
-      # game-data/valve/
-      # game-data/valve_hd/
-      # game-data/cstrike/
-      # game-data/cstrike_hd/
-      # game-data/custom/<game-name>/
-      #
-      # =========================================================
-      - name: Install game data
-        run: |
-          set -e
-
-          ENGINE="$GITHUB_WORKSPACE/engine/xash3d-fwgs"
-          IOSDIR="$ENGINE/build/ios"
-
-          if [ -d "$GITHUB_WORKSPACE/game-data" ]; then
-
-            echo "======================================"
-            echo "COPYING GAME DATA"
-            echo "======================================"
-
-            cp -R \
-              "$GITHUB_WORKSPACE/game-data/." \
-              "$IOSDIR/" \
-              2>/dev/null || true
-
+          # -----------------------------------------------------
+          # VERIFY IMPORTANT CS16 FILE
+          # -----------------------------------------------------
+          if [ -f "$BUILDDIR/ios/cstrike/cstrike.extras.pak" ]; then
+            echo "cstrike.extras.pak FOUND"
           else
-
-            echo "No game-data directory found."
-            echo "Skipping game data."
-
+            echo "cstrike.extras.pak not found - continuing"
           fi
 
 
-      # =========================================================
-      # 21. SHOW FINAL FILE TREE
-      # =========================================================
-      - name: Verify final game libraries
-        run: |
-          set -e
-
-          ENGINE="$GITHUB_WORKSPACE/engine/xash3d-fwgs"
-
+          # -----------------------------------------------------
+          # FINAL STRUCTURE
+          # -----------------------------------------------------
+          echo ""
           echo "======================================"
-          echo "FINAL IOS LIBRARY TREE"
+          echo "GAME DATA"
           echo "======================================"
 
-          find "$ENGINE/build/ios/libs" \
-            -type f \
-            -print \
-            | sort
-
-          echo "======================================"
-          echo "VALVE"
-          echo "======================================"
-
-          find "$ENGINE/build/ios/libs/valve" \
-            -type f \
+          find "$BUILDDIR/ios" \
+            -maxdepth 2 \
+            -type d \
             -print
 
+          echo ""
           echo "======================================"
-          echo "VALVE HD"
-          echo "======================================"
-
-          find "$ENGINE/build/ios/libs/valve_hd" \
-            -type f \
-            -print
-
-          echo "======================================"
-          echo "CSTRIKE"
+          echo "GAME LIBRARIES"
           echo "======================================"
 
-          find "$ENGINE/build/ios/libs/cstrike" \
-            -type f \
-            -print
-
-          echo "======================================"
-          echo "CSTRIKE HD"
-          echo "======================================"
-
-          find "$ENGINE/build/ios/libs/cstrike_hd" \
+          find "$BUILDDIR/ios/libs" \
             -type f \
             -print
 
 
       # =========================================================
-      # 22. COPY SDL2 FRAMEWORK
-      # =========================================================
-      - name: Install SDL2 framework
-        run: |
-          set -e
-
-          ENGINE="$GITHUB_WORKSPACE/engine/xash3d-fwgs"
-          BUILDDIR="$ENGINE/build"
-
-          rm -rf "$BUILDDIR/SDL2.framework"
-
-          cp -R \
-            "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework" \
-            "$BUILDDIR/SDL2.framework"
-
-          test -d "$BUILDDIR/SDL2.framework"
-
-
-      # =========================================================
-      # 23. CREATE IPA
+      # 15. CREATE IPA
       # =========================================================
       - name: Create IPA
         run: |
@@ -593,17 +428,17 @@ jobs:
 
           ./scripts/ios/createipa.sh
 
+          test -f build/xash3d.ipa
+
           echo "======================================"
           echo "IPA CREATED"
           echo "======================================"
 
           ls -lh build/xash3d.ipa
 
-          test -f build/xash3d.ipa
-
 
       # =========================================================
-      # 24. INSPECT IPA
+      # 16. INSPECT IPA
       # =========================================================
       - name: Inspect IPA
         run: |
@@ -611,13 +446,32 @@ jobs:
 
           cd "$GITHUB_WORKSPACE/engine/xash3d-fwgs/build"
 
+          echo "======================================"
+          echo "IPA CONTENTS"
+          echo "======================================"
+
           unzip -l xash3d.ipa
+
+          echo ""
+          echo "======================================"
+          echo "GAME FOLDERS"
+          echo "======================================"
+
+          unzip -l xash3d.ipa \
+            | grep -E \
+              'valve/|valve_hd/|cstrike/|cstrike_hd/' \
+            || true
+
+          echo ""
+          echo "======================================"
+          echo "IPA SIZE"
+          echo "======================================"
 
           ls -lh xash3d.ipa
 
 
       # =========================================================
-      # 25. UPLOAD IPA
+      # 17. UPLOAD IPA
       # =========================================================
       - name: Upload IPA
         uses: actions/upload-artifact@v4
