@@ -8,33 +8,76 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
-          brew install python cmake ninja
+          brew install python
+
+      - name: Clone SDL2
+        run: |
+          git clone --depth 1 --branch SDL2 --recursive \
+            https://github.com/libsdl-org/SDL.git \
+            SDL
+
+      - name: Build SDL2 iOS framework
+        run: |
+          cd SDL/Xcode/SDL
+
+          xcodebuild \
+            -project SDL.xcodeproj \
+            -scheme "Framework-iOS" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "$GITHUB_WORKSPACE/sdl-build" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+          test -d "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework"
+
+          echo "SDL2.framework built successfully"
+          ls -la "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/"
 
       - name: Clone Xash3D FWGS
         run: |
-          git clone --recursive https://github.com/FWGS/xash3d-fwgs.git engine/xash3d-fwgs
+          git clone --recursive \
+            https://github.com/FWGS/xash3d-fwgs.git \
+            engine/xash3d-fwgs
 
-      - name: Build Xash3D iOS
+      - name: Configure Xash3D for iOS
         run: |
           cd engine/xash3d-fwgs
+
           ./waf configure \
             --ios \
-            --enable-bundled-deps
+            --enable-bundled-deps \
+            --sdl2 "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework"
+
+      - name: Build Xash3D
+        run: |
+          cd engine/xash3d-fwgs
           ./waf build
 
-      - name: Show build output
+      - name: Prepare engine output
         run: |
-          find engine/xash3d-fwgs/build -type f \
+          mkdir -p out
+
+          cp -R \
+            "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework" \
+            out/
+
+          find engine/xash3d-fwgs/build \
+            -type f \
             \( -name "*.dylib" -o -name "xash" \) \
-            -print
+            -print \
+            -exec cp {} out/ \;
+
+          echo "===== OUTPUT ====="
+          find out -maxdepth 3 -type f -print
 
       - name: Upload engine build
         uses: actions/upload-artifact@v4
         with:
           name: xash3d-ios-engine
-          path: engine/xash3d-fwgs/build/
+          path: out/
