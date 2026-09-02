@@ -8,17 +8,86 @@ jobs:
     runs-on: macos-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
-          brew install cmake ninja
+          brew install cmake ninja python
+          brew uninstall --ignore-dependencies freetype || true
+          brew uninstall --ignore-dependencies harfbuzz || true
 
       - name: Clone ios-cmake
         run: |
           git clone --depth 1 \
             https://github.com/leetal/ios-cmake.git
+
+      - name: Build FreeType for iOS arm64
+        run: |
+          git clone --depth 1 --branch VER-2-13-3 \
+            https://github.com/freetype/freetype.git freetype
+
+          cmake -S freetype -B freetype-build \
+            -G Xcode \
+            -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/ios-cmake/ios.toolchain.cmake" \
+            -DPLATFORM=OS64 \
+            -DDEPLOYMENT_TARGET=13.0 \
+            -DENABLE_BITCODE=0 \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/freetype-ios" \
+            -DFT_DISABLE_PNG=TRUE \
+            -DFT_DISABLE_ZLIB=TRUE \
+            -DFT_DISABLE_BZIP2=TRUE \
+            -DFT_DISABLE_HARFBUZZ=TRUE \
+            -DFT_DISABLE_BROTLI=TRUE
+
+          cmake --build freetype-build --config Release
+          cmake --install freetype-build --config Release
+
+          echo "===== FREETYPE ====="
+          find "$GITHUB_WORKSPACE/freetype-ios" -name "*.a"
+
+      - name: Clone SDL2
+        run: |
+          git clone --depth 1 --branch SDL2 --recursive \
+            https://github.com/libsdl-org/SDL.git SDL
+
+      - name: Build SDL2 iOS framework
+        run: |
+          cd SDL/Xcode/SDL
+
+          xcodebuild \
+            -project SDL.xcodeproj \
+            -scheme "Framework-iOS" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "$GITHUB_WORKSPACE/sdl-build" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+          test -d "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework"
+
+          echo "SDL2.framework built successfully"
+
+      - name: Clone Xash3D FWGS
+        run: |
+          git clone --recursive \
+            https://github.com/FWGS/xash3d-fwgs.git \
+            engine/xash3d-fwgs
+
+      - name: Configure Xash3D for iOS
+        run: |
+          cd engine/xash3d-fwgs
+
+          ./waf configure \
+            --ios \
+            --enable-bundled-deps \
+            --sdl2 "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework"
+
+      - name: Build Xash3D
+        run: |
+          cd engine/xash3d-fwgs
+          ./waf build
 
       - name: Clone CS16 Client
         run: |
@@ -36,6 +105,8 @@ jobs:
             -DPLATFORM=OS64 \
             -DDEPLOYMENT_TARGET=13.0 \
             -DENABLE_BITCODE=0 \
+            -DFREETYPE_LIBRARY="$GITHUB_WORKSPACE/freetype-ios/lib/libfreetype.a" \
+            -DFREETYPE_INCLUDE_DIRS="$GITHUB_WORKSPACE/freetype-ios/include/freetype2" \
             -DCMAKE_BUILD_TYPE=Release
 
       - name: Build CS16 Client
@@ -52,8 +123,29 @@ jobs:
             \( -name "*.dylib" -o -name "*.a" \) \
             -print
 
-      - name: Upload CS16 build
+      - name: Prepare output
+        run: |
+          mkdir -p out
+
+          cp -R \
+            "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework" \
+            out/
+
+          find engine/xash3d-fwgs/build \
+            -type f \
+            \( -name "*.dylib" -o -name "xash" \) \
+            -exec cp {} out/ \;
+
+          find cs16-build \
+            -type f \
+            \( -name "*.dylib" -o -name "*.a" \) \
+            -exec cp {} out/ \;
+
+          echo "===== FINAL OUTPUT ====="
+          find out -maxdepth 2 -type f -print
+
+      - name: Upload iOS build
         uses: actions/upload-artifact@v4
         with:
-          name: cs16-ios-arm64
-          path: cs16-build/
+          name: xash3d-cs16-ios-arm64
+          path: out/
