@@ -1,1 +1,40 @@
+name: Build Xash3D iOS
 
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install python cmake ninja
+
+      - name: Clone Xash3D FWGS
+        run: |
+          git clone --recursive https://github.com/FWGS/xash3d-fwgs.git engine/xash3d-fwgs
+
+      - name: Build Xash3D iOS
+        run: |
+          cd engine/xash3d-fwgs
+          ./waf configure \
+            --ios \
+            --enable-bundled-deps
+          ./waf build
+
+      - name: Show build output
+        run: |
+          find engine/xash3d-fwgs/build -type f \
+            \( -name "*.dylib" -o -name "xash" \) \
+            -print
+
+      - name: Upload engine build
+        uses: actions/upload-artifact@v4
+        with:
+          name: xash3d-ios-engine
+          path: engine/xash3d-fwgs/build/
