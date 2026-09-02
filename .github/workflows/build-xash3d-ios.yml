@@ -1,4 +1,4 @@
-name: Build Xash3D iOS
+name: Build Xash3D + CS16 iOS
 
 on:
   workflow_dispatch:
@@ -13,71 +13,47 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install python
+          brew install cmake ninja
 
-      - name: Clone SDL2
+      - name: Clone ios-cmake
         run: |
-          git clone --depth 1 --branch SDL2 --recursive \
-            https://github.com/libsdl-org/SDL.git \
-            SDL
+          git clone --depth 1 \
+            https://github.com/leetal/ios-cmake.git
 
-      - name: Build SDL2 iOS framework
-        run: |
-          cd SDL/Xcode/SDL
-
-          xcodebuild \
-            -project SDL.xcodeproj \
-            -scheme "Framework-iOS" \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath "$GITHUB_WORKSPACE/sdl-build" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO
-
-          test -d "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework"
-
-          echo "SDL2.framework built successfully"
-          ls -la "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/"
-
-      - name: Clone Xash3D FWGS
+      - name: Clone CS16 Client
         run: |
           git clone --recursive \
-            https://github.com/FWGS/xash3d-fwgs.git \
-            engine/xash3d-fwgs
+            https://github.com/Velaron/cs16-client.git \
+            cs16-client
 
-      - name: Configure Xash3D for iOS
+      - name: Configure CS16 Client for iOS arm64
         run: |
-          cd engine/xash3d-fwgs
+          cmake \
+            -S cs16-client \
+            -B cs16-build \
+            -G Xcode \
+            -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/ios-cmake/ios.toolchain.cmake" \
+            -DPLATFORM=OS64 \
+            -DDEPLOYMENT_TARGET=13.0 \
+            -DENABLE_BITCODE=0 \
+            -DCMAKE_BUILD_TYPE=Release
 
-          ./waf configure \
-            --ios \
-            --enable-bundled-deps \
-            --sdl2 "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework"
-
-      - name: Build Xash3D
+      - name: Build CS16 Client
         run: |
-          cd engine/xash3d-fwgs
-          ./waf build
+          cmake \
+            --build cs16-build \
+            --config Release
 
-      - name: Prepare engine output
+      - name: Show CS16 output
         run: |
-          mkdir -p out
-
-          cp -R \
-            "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework" \
-            out/
-
-          find engine/xash3d-fwgs/build \
+          echo "===== CS16 BUILD OUTPUT ====="
+          find cs16-build \
             -type f \
-            \( -name "*.dylib" -o -name "xash" \) \
-            -print \
-            -exec cp {} out/ \;
+            \( -name "*.dylib" -o -name "*.a" \) \
+            -print
 
-          echo "===== OUTPUT ====="
-          find out -maxdepth 3 -type f -print
-
-      - name: Upload engine build
+      - name: Upload CS16 build
         uses: actions/upload-artifact@v4
         with:
-          name: xash3d-ios-engine
-          path: out/
+          name: cs16-ios-arm64
+          path: cs16-build/
