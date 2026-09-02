@@ -1,4 +1,4 @@
-name: Build Xash3D + CS16 iOS
+name: Build Xash3D + CS16 iOS IPA
 
 on:
   workflow_dispatch:
@@ -44,9 +44,6 @@ jobs:
           cmake --build freetype-build --config Release
           cmake --install freetype-build --config Release
 
-          echo "===== FREETYPE ====="
-          find "$GITHUB_WORKSPACE/freetype-ios" -name "*.a"
-
       - name: Clone SDL2
         run: |
           git clone --depth 1 --branch SDL2 --recursive \
@@ -66,8 +63,6 @@ jobs:
             CODE_SIGNING_REQUIRED=NO
 
           test -d "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework"
-
-          echo "SDL2.framework built successfully"
 
       - name: Clone Xash3D FWGS
         run: |
@@ -115,37 +110,48 @@ jobs:
             --build cs16-build \
             --config Release
 
-      - name: Show CS16 output
+      - name: Prepare Xash3D iOS bundle
         run: |
-          echo "===== CS16 BUILD OUTPUT ====="
-          find cs16-build \
-            -type f \
-            \( -name "*.dylib" -o -name "*.a" \) \
-            -print
+          cd engine/xash3d-fwgs
 
-      - name: Prepare output
-        run: |
-          mkdir -p out
+          rm -rf build/ios
+          mkdir -p build/ios/libs/cstrike/cl_dlls
+          mkdir -p build/ios/libs/cstrike/dlls
 
           cp -R \
             "$GITHUB_WORKSPACE/sdl-build/Build/Products/Release-iphoneos/SDL2.framework" \
-            out/
+            build/
 
-          find engine/xash3d-fwgs/build \
-            -type f \
-            \( -name "*.dylib" -o -name "xash" \) \
-            -exec cp {} out/ \;
+          echo "===== COPYING CS16 CLIENT ====="
 
-          find cs16-build \
-            -type f \
-            \( -name "*.dylib" -o -name "*.a" \) \
-            -exec cp {} out/ \;
+          cp "$GITHUB_WORKSPACE/cs16-build/3rdparty/mainui_cpp/Release-iphoneos/menu_arm64.dylib" \
+            build/ios/libs/cstrike/cl_dlls/menu_arm64.dylib
 
-          echo "===== FINAL OUTPUT ====="
-          find out -maxdepth 2 -type f -print
+          cp "$GITHUB_WORKSPACE/cs16-build/3rdparty/mainui_cpp/Release-iphoneos/client_arm64.dylib" \
+            build/ios/libs/cstrike/cl_dlls/client_arm64.dylib
 
-      - name: Upload iOS build
+          cp "$GITHUB_WORKSPACE/cs16-build/3rdparty/mainui_cpp/Release-iphoneos/cs_arm64.dylib" \
+            build/ios/libs/cstrike/dlls/cs_arm64.dylib
+
+          cp "$GITHUB_WORKSPACE/cs16-build/3rdparty/mainui_cpp/Release-iphoneos/yapb_arm64.dylib" \
+            build/ios/libs/cstrike/dlls/yapb_arm64.dylib
+
+          echo "===== CHECK CS16 FILES ====="
+          find build/ios -type f -print
+
+      - name: Create IPA
+        run: |
+          cd engine/xash3d-fwgs
+
+          chmod +x scripts/ios/createipa.sh
+
+          ./scripts/ios/createipa.sh
+
+          mv build/xash3d.ipa \
+            "$GITHUB_WORKSPACE/xash3d-cs16-ios-arm64.ipa"
+
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: xash3d-cs16-ios-arm64
-          path: out/
+          name: xash3d-cs16-ios-ipa
+          path: xash3d-cs16-ios-arm64.ipa
